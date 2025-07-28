@@ -19,11 +19,10 @@ export default {
 		},
 		extend: {
 			backgroundImage: {
-				'gradient-primary': 'var(--gradient-primary)',
-				'gradient-accent': 'var(--gradient-accent)',
+				'gradient-dark': 'var(--gradient-dark)',
 			},
 			boxShadow: {
-				'glow': 'var(--shadow-glow)',
+				'spotify': 'var(--shadow-spotify)',
 			},
 			transitionTimingFunction: {
 				'smooth': 'var(--transition-smooth)',

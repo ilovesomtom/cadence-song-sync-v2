@@ -1,6 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Play, Plus, Heart } from "lucide-react";
 
 interface SongCardProps {
@@ -14,42 +12,54 @@ interface SongCardProps {
 
 const SongCard = ({ title, artist, bpm, duration, albumArt, inLibrary = false }: SongCardProps) => {
   return (
-    <Card className="hover:bg-accent/5 transition-colors group">
-      <CardContent className="p-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-gradient-accent rounded-lg flex items-center justify-center flex-shrink-0">
-            {albumArt ? (
-              <img src={albumArt} alt="Album art" className="w-full h-full rounded-lg object-cover" />
-            ) : (
-              <Play className="h-6 w-6 text-white" />
-            )}
+    <div className="group flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+      {/* Album Art */}
+      <div className="relative w-12 h-12 flex-shrink-0">
+        {albumArt ? (
+          <img src={albumArt} alt="Album art" className="w-full h-full rounded object-cover" />
+        ) : (
+          <div className="w-full h-full bg-muted rounded flex items-center justify-center">
+            <Play className="h-5 w-5 text-muted-foreground" />
           </div>
-          
-          <div className="flex-1 min-w-0">
-            <h3 className="font-medium truncate">{title}</h3>
-            <p className="text-sm text-muted-foreground truncate">{artist}</p>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge variant="secondary" className="text-xs">
-                {bpm} BPM
-              </Badge>
-              <span className="text-xs text-muted-foreground">{duration}</span>
-              {inLibrary && (
-                <Heart className="h-3 w-3 text-accent fill-current" />
-              )}
-            </div>
-          </div>
-          
-          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button size="sm" variant="ghost">
-              <Play className="h-4 w-4" />
-            </Button>
-            <Button size="sm" variant="accent">
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
+        )}
+        <Button 
+          size="sm" 
+          className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full w-8 h-8 m-auto transition-opacity"
+        >
+          <Play className="h-3 w-3 fill-current" />
+        </Button>
+      </div>
+      
+      {/* Song Info */}
+      <div className="flex-1 min-w-0">
+        <h3 className="font-medium text-foreground truncate hover:underline cursor-pointer">
+          {title}
+        </h3>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {inLibrary && <Heart className="h-3 w-3 text-primary fill-current" />}
+          <span className="truncate hover:underline cursor-pointer">{artist}</span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+      
+      {/* BPM Badge */}
+      <div className="hidden sm:block">
+        <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full font-medium">
+          {bpm} BPM
+        </span>
+      </div>
+      
+      {/* Duration and Actions */}
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <span>{duration}</span>
+        <Button 
+          size="sm" 
+          variant="ghost" 
+          className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
   );
 };
 
