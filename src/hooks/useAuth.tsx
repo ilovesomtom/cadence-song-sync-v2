@@ -89,10 +89,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Continue even if this fails
       }
 
+      // Explicitly set the redirect URL to the current domain
+      const redirectUrl = 'https://3213e8d1-c37f-49df-a088-e276aba539f4.lovableproject.com/';
+      console.log('Attempting Spotify login with redirect URL:', redirectUrl);
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'spotify',
         options: {
-          redirectTo: `${window.location.origin}/`,
+          redirectTo: redirectUrl,
           scopes: 'user-read-private user-read-email playlist-read-private user-library-read user-top-read'
         }
       });
