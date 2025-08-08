@@ -1,4 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react';
+import { toast } from 'sonner';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -92,6 +93,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Explicitly set the redirect URL to the deployed domain
       const redirectUrl = 'https://cadence-song-sync-v2.vercel.app/';
       console.log('Attempting Spotify login with redirect URL:', redirectUrl);
+      toast('Redirecting to Spotify…');
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'spotify',
@@ -103,10 +105,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (error) {
         console.error('Error signing in with Spotify:', error);
+        toast.error(`Spotify sign-in failed: ${error.message || error}`);
         throw error;
       }
     } catch (error) {
       console.error('Spotify sign in error:', error);
+      if (error instanceof Error) {
+        toast.error(`Spotify sign-in failed: ${error.message}`);
+      } else {
+        toast.error('Spotify sign-in failed');
+      }
       throw error;
     }
   };
