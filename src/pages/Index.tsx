@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,20 @@ const Index = () => {
   const [minBpm, setMinBpm] = useState("");
   const [maxBpm, setMaxBpm] = useState("");
   const [showResults, setShowResults] = useState(false);
+  
+  // Surface OAuth errors (e.g., provider_email_needs_verification) from redirect params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    const errorDescription = params.get('error_description');
+    if (error) {
+      toast.error(errorDescription || 'Authentication error');
+      // Clean the URL
+      const url = new URL(window.location.href);
+      url.search = '';
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
   
   const handleSearch = async () => {
     await searchSongs({
