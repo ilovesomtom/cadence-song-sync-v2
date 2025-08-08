@@ -40,7 +40,8 @@ const Index = () => {
       singleBpm,
       minBpm,
       maxBpm,
-      genres: selectedGenres
+      genres: selectedGenres,
+      source: 'recommendations'
     });
     setShowResults(true);
   };
@@ -54,7 +55,8 @@ const Index = () => {
         singleBpm,
         minBpm,
         maxBpm,
-        genres: selectedGenres
+        genres: selectedGenres,
+        source: 'saved'
       });
       setShowResults(true);
     }

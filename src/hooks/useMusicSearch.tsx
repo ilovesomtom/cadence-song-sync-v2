@@ -15,6 +15,8 @@ interface SearchParams {
   minBpm?: string;
   maxBpm?: string;
   genres: string[];
+  source?: 'recommendations' | 'top' | 'saved' | 'playlists';
+  playlistIds?: string[];
 }
 
 export const useMusicSearch = () => {
