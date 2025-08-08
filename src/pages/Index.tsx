@@ -51,9 +51,9 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="grid grid-cols-1 lg:grid-cols-2 min-h-screen">
-        {/* Left Panel - Search Controls */}
-        <div className="bg-card/20 p-8 space-y-8">
+      <div className="flex items-center justify-center min-h-screen p-4">
+        {/* Centered Content Panel */}
+        <div className="w-full max-w-md space-y-8">
           {/* Spotify Login */}
           {!user && (
             <div className="text-center space-y-3">
@@ -87,16 +87,16 @@ const Index = () => {
               <TabsContent value="single" className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="singleBpm" className="text-white">Target BPM</Label>
-                  <Input
-                    id="singleBpm"
-                    type="number"
-                    placeholder="e.g., 180"
-                    value={singleBpm}
-                    onChange={(e) => setSingleBpm(e.target.value)}
-                    min="60"
-                    max="200"
-                    className="text-center text-lg font-mono max-w-sm bg-muted/20"
-                  />
+                   <Input
+                     id="singleBpm"
+                     type="number"
+                     placeholder="e.g., 180"
+                     value={singleBpm}
+                     onChange={(e) => setSingleBpm(e.target.value)}
+                     min="60"
+                     max="200"
+                     className="text-center text-lg font-mono max-w-sm bg-muted/20 text-white"
+                   />
                 </div>
               </TabsContent>
               
@@ -104,29 +104,29 @@ const Index = () => {
                 <div className="grid grid-cols-2 gap-4 max-w-sm">
                   <div className="space-y-2">
                     <Label htmlFor="minBpm" className="text-white">Min BPM</Label>
-                    <Input
-                      id="minBpm"
-                      type="number"
-                      placeholder="170"
-                      value={minBpm}
-                      onChange={(e) => setMinBpm(e.target.value)}
-                      min="60"
-                      max="200"
-                      className="text-center font-mono bg-muted/20"
-                    />
+                     <Input
+                       id="minBpm"
+                       type="number"
+                       placeholder="170"
+                       value={minBpm}
+                       onChange={(e) => setMinBpm(e.target.value)}
+                       min="60"
+                       max="200"
+                       className="text-center font-mono bg-muted/20 text-white"
+                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="maxBpm" className="text-white">Max BPM</Label>
-                    <Input
-                      id="maxBpm"
-                      type="number"
-                      placeholder="190"
-                      value={maxBpm}
-                      onChange={(e) => setMaxBpm(e.target.value)}
-                      min="60"
-                      max="200"
-                      className="text-center font-mono bg-muted/20"
-                    />
+                     <Input
+                       id="maxBpm"
+                       type="number"
+                       placeholder="190"
+                       value={maxBpm}
+                       onChange={(e) => setMaxBpm(e.target.value)}
+                       min="60"
+                       max="200"
+                       className="text-center font-mono bg-muted/20 text-white"
+                     />
                   </div>
                 </div>
               </TabsContent>
@@ -137,47 +137,59 @@ const Index = () => {
           <GenreSelector />
           
           {/* Search Buttons */}
-          <div className="space-y-3">
-            <Button 
-              onClick={handleSearch}
-              className="bg-green-600 hover:bg-green-700 text-white w-full max-w-sm rounded-lg"
-            >
-              Search
-            </Button>
-            
-            <div className="text-center text-muted-foreground text-sm">or</div>
-            
-            <Button 
-              onClick={handlePlaylistSearch}
-              variant="outline"
-              className="w-full max-w-sm rounded-lg border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
-              disabled={!user}
-            >
-              Search from your playlists
-            </Button>
-          </div>
-        </div>
-        
-        {/* Right Panel - Search Results */}
-        <div className="p-8">
-          {showResults ? (
-            <SearchResults 
-              songs={mockSongs}
-              bpmRange={getBpmDisplay()}
-              onShuffle={handleShuffle}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-center">
-              <div className="space-y-4">
-                <Music className="h-16 w-16 text-muted-foreground mx-auto" />
-                <div>
-                  <h3 className="text-xl font-medium text-white mb-2">Ready to find your rhythm?</h3>
-                  <p className="text-muted-foreground">Set your BPM and search for the perfect songs</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+           <div className="space-y-3">
+             <Button 
+               onClick={handleSearch}
+               className="bg-green-600 hover:bg-green-700 text-white w-full max-w-sm rounded-lg"
+             >
+               Search
+             </Button>
+             
+             <div className="text-center text-muted-foreground text-sm">or</div>
+             
+             <Button 
+               onClick={handlePlaylistSearch}
+               variant="outline"
+               className="w-full max-w-sm rounded-lg border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
+               disabled={!user}
+             >
+               Search from your playlists
+             </Button>
+           </div>
+           
+           {/* Bottom Message */}
+           {!showResults && (
+             <div className="text-center space-y-4 mt-8">
+               <Music className="h-16 w-16 text-muted-foreground mx-auto" />
+               <div>
+                 <h3 className="text-xl font-medium text-white mb-2">Ready to find your rhythm?</h3>
+                 <p className="text-muted-foreground">Set your BPM and search for the perfect songs</p>
+               </div>
+             </div>
+           )}
+         </div>
+         
+         {/* Search Results Modal */}
+         {showResults && (
+           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+             <div className="bg-background rounded-lg w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+               <div className="p-6">
+                 <SearchResults 
+                   songs={mockSongs}
+                   bpmRange={getBpmDisplay()}
+                   onShuffle={handleShuffle}
+                 />
+                 <Button 
+                   onClick={() => setShowResults(false)}
+                   variant="outline"
+                   className="mt-4 w-full"
+                 >
+                   Close
+                 </Button>
+               </div>
+             </div>
+           </div>
+         )}
       </div>
     </div>
   );
