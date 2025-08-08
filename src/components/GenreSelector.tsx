@@ -14,25 +14,28 @@ const genres = [
   "House"
 ];
 
-const GenreSelector = () => {
-  const [selectedGenres, setSelectedGenres] = useState<string[]>(["Pop", "Electronics"]);
+interface GenreSelectorProps {
+  selectedGenres: string[];
+  onGenresChange: (genres: string[]) => void;
+}
+
+const GenreSelector = ({ selectedGenres, onGenresChange }: GenreSelectorProps) => {
   const [showMore, setShowMore] = useState(false);
   
   const visibleGenres = showMore ? genres : genres.slice(0, 3);
   
   const handleGenreToggle = (genre: string) => {
-    setSelectedGenres(prev => 
-      prev.includes(genre) 
-        ? prev.filter(g => g !== genre)
-        : [...prev, genre]
-    );
+    const newGenres = selectedGenres.includes(genre) 
+      ? selectedGenres.filter(g => g !== genre)
+      : [...selectedGenres, genre];
+    onGenresChange(newGenres);
   };
   
   const handleSelectAll = () => {
     if (selectedGenres.length === genres.length) {
-      setSelectedGenres([]);
+      onGenresChange([]);
     } else {
-      setSelectedGenres([...genres]);
+      onGenresChange([...genres]);
     }
   };
 

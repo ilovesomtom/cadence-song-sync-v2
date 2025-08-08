@@ -5,32 +5,42 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Music } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useMusicSearch } from "@/hooks/useMusicSearch";
 import GenreSelector from "@/components/GenreSelector";
 import SearchResults from "@/components/SearchResults";
 
-const mockSongs = [
-  { title: "Thunder", artist: "Imagine Dragons", bpm: 168, duration: "3:07", inLibrary: true },
-  { title: "Stronger", artist: "Kelly Clarkson", bpm: 168, duration: "3:42", inLibrary: true },
-  { title: "Can't Hold Us", artist: "Macklemore & Ryan Lewis", bpm: 170, duration: "4:18", inLibrary: false },
-  { title: "Pump It", artist: "Black Eyed Peas", bpm: 172, duration: "3:35", inLibrary: true },
-];
-
 const Index = () => {
   const { user, signInWithSpotify } = useAuth();
+  const { searchSongs, songs, isLoading, error } = useMusicSearch();
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [bpmMode, setBpmMode] = useState<"single" | "range">("single");
   const [singleBpm, setSingleBpm] = useState("");
   const [minBpm, setMinBpm] = useState("");
   const [maxBpm, setMaxBpm] = useState("");
   const [showResults, setShowResults] = useState(false);
   
-  const handleSearch = () => {
+  const handleSearch = async () => {
+    await searchSongs({
+      bpmMode,
+      singleBpm,
+      minBpm,
+      maxBpm,
+      genres: selectedGenres
+    });
     setShowResults(true);
   };
   
-  const handlePlaylistSearch = () => {
+  const handlePlaylistSearch = async () => {
     if (!user) {
       signInWithSpotify();
     } else {
+      await searchSongs({
+        bpmMode,
+        singleBpm,
+        minBpm,
+        maxBpm,
+        genres: selectedGenres
+      });
       setShowResults(true);
     }
   };
@@ -134,27 +144,38 @@ const Index = () => {
           </div>
           
           {/* Genre Selection */}
-          <GenreSelector />
+          <GenreSelector 
+            selectedGenres={selectedGenres}
+            onGenresChange={setSelectedGenres}
+          />
           
           {/* Search Buttons */}
            <div className="space-y-3">
-             <Button 
-               onClick={handleSearch}
-               className="bg-green-600 hover:bg-green-700 text-white w-full max-w-sm rounded-lg"
-             >
-               Search
-             </Button>
+              <Button 
+                onClick={handleSearch}
+                disabled={isLoading}
+                className="bg-green-600 hover:bg-green-700 text-white w-full max-w-sm rounded-lg"
+              >
+                {isLoading ? 'Searching...' : 'Search'}
+              </Button>
              
              <div className="text-center text-muted-foreground text-sm">or</div>
              
              <Button 
                onClick={handlePlaylistSearch}
                variant="outline"
+               disabled={!user || isLoading}
                className="w-full max-w-sm rounded-lg border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
-               disabled={!user}
              >
-               Search from your playlists
+               {isLoading ? 'Searching...' : 'Search from your playlists'}
              </Button>
+             
+             {/* Error Display */}
+             {error && (
+               <div className="text-red-400 text-sm text-center mt-2">
+                 {error}
+               </div>
+             )}
            </div>
            
            {/* Bottom Message */}
@@ -174,11 +195,11 @@ const Index = () => {
            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
              <div className="bg-background rounded-lg w-full max-w-2xl max-h-[80vh] overflow-y-auto">
                <div className="p-6">
-                 <SearchResults 
-                   songs={mockSongs}
-                   bpmRange={getBpmDisplay()}
-                   onShuffle={handleShuffle}
-                 />
+                  <SearchResults 
+                    songs={songs}
+                    bpmRange={getBpmDisplay()}
+                    onShuffle={handleShuffle}
+                  />
                  <Button 
                    onClick={() => setShowResults(false)}
                    variant="outline"
