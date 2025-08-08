@@ -89,8 +89,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Continue even if this fails
       }
 
-      // Explicitly set the redirect URL to the current domain
-      const redirectUrl = 'https://3213e8d1-c37f-49df-a088-e276aba539f4.lovableproject.com/';
+      // Explicitly set the redirect URL to the deployed domain
+      const redirectUrl = 'https://cadence-song-sync-v2.vercel.app/';
       console.log('Attempting Spotify login with redirect URL:', redirectUrl);
 
       const { error } = await supabase.auth.signInWithOAuth({
