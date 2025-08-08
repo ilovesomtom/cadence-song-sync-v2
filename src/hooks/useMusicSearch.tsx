@@ -31,8 +31,13 @@ export const useMusicSearch = () => {
     try {
       console.log('Searching with params:', params);
       
+      // Attach the user's auth token so the Edge Function can read user-scoped data
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
       const { data, error: functionError } = await supabase.functions.invoke('music-search', {
-        body: params
+        body: params,
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
       });
 
       if (functionError) {
