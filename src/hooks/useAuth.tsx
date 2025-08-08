@@ -99,7 +99,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         provider: 'spotify',
         options: {
           redirectTo: redirectUrl,
-          scopes: 'user-read-private user-read-email playlist-read-private user-library-read user-top-read'
+          scopes: 'user-read-private user-read-email playlist-read-private user-library-read user-top-read',
+          queryParams: { show_dialog: 'true' }
         }
       });
 
