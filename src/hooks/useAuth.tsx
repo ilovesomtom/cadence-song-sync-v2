@@ -31,6 +31,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (event === 'SIGNED_IN' && session?.user) {
           setTimeout(async () => {
             await createOrUpdateProfile(session.user);
+            // Persist Spotify token for server-side use
+            if (session.provider_token) {
+              await storeSpotifyToken(session);
+            }
           }, 0);
         }
       }
@@ -42,6 +46,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      // If we already have a provider token, ensure it's stored
+      if (session?.provider_token) {
+        setTimeout(async () => {
+          await storeSpotifyToken(session);
+        }, 0);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -66,6 +76,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     } catch (error) {
       console.error('Error in createOrUpdateProfile:', error);
+    }
+  };
+
+  const storeSpotifyToken = async (session: Session) => {
+    try {
+      const currentUser = session.user;
+      const accessToken = (session as any).provider_token as string | undefined;
+      const refreshToken = (session as any).provider_refresh_token as string | undefined;
+      if (!currentUser || !accessToken) return;
+
+      const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+      const { error } = await supabase
+        .from('spotify_tokens')
+        .upsert({
+          id: currentUser.id,
+          access_token: accessToken,
+          refresh_token: refreshToken || '',
+          expires_at: expiresAt,
+          token_type: 'Bearer',
+          scope: 'user-read-private user-read-email playlist-read-private user-library-read user-top-read',
+        }, { onConflict: 'id' });
+      if (error) {
+        console.error('Error storing Spotify token:', error);
+      }
+    } catch (error) {
+      console.error('Error in storeSpotifyToken:', error);
     }
   };
 

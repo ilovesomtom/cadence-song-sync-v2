@@ -35,6 +35,9 @@ const Index = () => {
   }, []);
   
   const handleSearch = async () => {
+    console.log('🔍 Regular search clicked');
+    console.log('User:', user?.email);
+    console.log('BPM params:', { bpmMode, singleBpm, minBpm, maxBpm, genres: selectedGenres });
     await searchSongs({
       bpmMode,
       singleBpm,
@@ -47,9 +50,14 @@ const Index = () => {
   };
   
   const handlePlaylistSearch = async () => {
+    console.log('🎵 Playlist search clicked');
+    console.log('User:', user?.email);
+    console.log('BPM params:', { bpmMode, singleBpm, minBpm, maxBpm, genres: selectedGenres });
     if (!user) {
+      console.log('No user, redirecting to Spotify login');
       signInWithSpotify();
     } else {
+      console.log('User found, searching user library');
       await searchSongs({
         bpmMode,
         singleBpm,

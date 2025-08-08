@@ -12,6 +12,7 @@ interface SearchParams {
   minBpm?: string;
   maxBpm?: string;
   genres: string[];
+  source?: string; // Added for debugging
 }
 
 async function getAppSpotifyToken(): Promise<string | null> {
@@ -104,13 +105,14 @@ serve(async (req) => {
     )
 
     // Get request data
-    const { bpmMode, singleBpm, minBpm, maxBpm, genres }: SearchParams = await req.json();
-    console.log('Search params:', { bpmMode, singleBpm, minBpm, maxBpm, genres });
+    const { bpmMode, singleBpm, minBpm, maxBpm, genres, source }: SearchParams = await req.json();
+    console.log('🔍 Search params:', { bpmMode, singleBpm, minBpm, maxBpm, genres, source });
 
     // Get user from auth header
     const authHeader = req.headers.get('Authorization')
+    console.log('🔑 Auth header present:', !!authHeader);
     if (!authHeader) {
-      console.log('No auth header provided, proceeding without user-specific data');
+      console.log('❌ No auth header provided, proceeding without user-specific data');
     }
 
     let spotifyToken: string | null = null;
@@ -122,25 +124,31 @@ serve(async (req) => {
       const { data: { user } } = await supabaseClient.auth.getUser(token)
       
       if (user) {
-        console.log('User authenticated:', user.id);
+        console.log('✅ User authenticated:', user.id, user.email);
         
         // Get user's Spotify access token
-        const { data: tokenData } = await supabaseClient
+        const { data: tokenData, error: tokenError } = await supabaseClient
           .from('spotify_tokens')
           .select('access_token, expires_at')
           .eq('id', user.id)
           .single()
         
+        console.log('🎵 Token lookup result:', { tokenData: !!tokenData, error: tokenError });
+        
         if (tokenData && new Date(tokenData.expires_at) > new Date()) {
           spotifyToken = tokenData.access_token;
-          console.log('Using user Spotify token');
+          console.log('✅ Using user Spotify token');
+        } else {
+          console.log('❌ No valid user token found');
         }
+      } else {
+        console.log('❌ User not authenticated');
       }
     }
 
     // If we have a user token, search user library/top tracks; else fall back to recommendations
     if (spotifyToken) {
-      console.log('Using user Spotify token')
+      console.log('🎵 Using user Spotify token for search');
       const targetMin = bpmMode === 'single' && singleBpm
         ? parseInt(singleBpm) - 5
         : bpmMode === 'range' && minBpm && maxBpm
@@ -152,6 +160,8 @@ serve(async (req) => {
           ? parseInt(maxBpm)
           : 140
 
+      console.log('🎯 BPM target range:', { targetMin, targetMax });
+
       // Fetch user's top tracks (50)
       const topRes = await fetch('https://api.spotify.com/v1/me/top/tracks?limit=50', {
         headers: { 'Authorization': `Bearer ${spotifyToken}` }
@@ -160,19 +170,30 @@ serve(async (req) => {
       if (topRes.ok) {
         const topJson = await topRes.json()
         tracks = (topJson.items || [])
+        console.log('📊 Fetched', tracks.length, 'top tracks from user');
       } else {
-        console.warn('Top tracks request failed, falling back to recommendations')
+        console.warn('❌ Top tracks request failed:', topRes.status, await topRes.text());
       }
 
       // Optionally: also fetch liked tracks or playlist tracks in future
 
       if (tracks.length > 0) {
         const ids = tracks.map(t => t.id).filter(Boolean)
+        console.log('🎵 Fetching audio features for', ids.length, 'tracks');
         const tempos = await fetchAudioFeatures(spotifyToken, ids)
+        console.log('🎵 Got tempo data for', Object.keys(tempos).length, 'tracks');
+        
         const filtered = tracks.filter(t => {
           const tempo = tempos[t.id]
-          return typeof tempo === 'number' && tempo >= targetMin && tempo <= targetMax
+          const inRange = typeof tempo === 'number' && tempo >= targetMin && tempo <= targetMax
+          if (inRange) {
+            console.log('✅ Track matches BPM:', t.name, 'BPM:', tempo);
+          }
+          return inRange
         })
+        
+        console.log('🎯 Found', filtered.length, 'tracks matching BPM range');
+        
         const songs = filtered.map(t => ({
           title: t.name as string,
           artist: (t.artists || []).map((a: any) => a.name).join(', '),
