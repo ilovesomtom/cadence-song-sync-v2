@@ -10,10 +10,40 @@ export type Database = {
   // Allows to automatically instanciate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.12 (cd3cf9e)"
+    PostgrestVersion: "13.0.4"
   }
   public: {
     Tables: {
+      music_search_cache: {
+        Row: {
+          bpm_range: string
+          created_at: string | null
+          expires_at: string | null
+          genres: string[]
+          id: string
+          results: Json
+          search_query: string
+        }
+        Insert: {
+          bpm_range: string
+          created_at?: string | null
+          expires_at?: string | null
+          genres: string[]
+          id?: string
+          results: Json
+          search_query: string
+        }
+        Update: {
+          bpm_range?: string
+          created_at?: string | null
+          expires_at?: string | null
+          genres?: string[]
+          id?: string
+          results?: Json
+          search_query?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
