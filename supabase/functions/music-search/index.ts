@@ -138,17 +138,58 @@ serve(async (req) => {
       }
     }
 
-    // If no user token, get an app token for public endpoints
-    if (!spotifyToken) {
-      spotifyToken = await getAppSpotifyToken()
-      console.log('Using app token for Spotify calls')
-    } else {
+    // If we have a user token, search user library/top tracks; else fall back to recommendations
+    if (spotifyToken) {
       console.log('Using user Spotify token')
+      const targetMin = bpmMode === 'single' && singleBpm
+        ? parseInt(singleBpm) - 5
+        : bpmMode === 'range' && minBpm && maxBpm
+          ? parseInt(minBpm)
+          : 120
+      const targetMax = bpmMode === 'single' && singleBpm
+        ? parseInt(singleBpm) + 5
+        : bpmMode === 'range' && minBpm && maxBpm
+          ? parseInt(maxBpm)
+          : 140
+
+      // Fetch user's top tracks (50)
+      const topRes = await fetch('https://api.spotify.com/v1/me/top/tracks?limit=50', {
+        headers: { 'Authorization': `Bearer ${spotifyToken}` }
+      })
+      let tracks: Array<any> = []
+      if (topRes.ok) {
+        const topJson = await topRes.json()
+        tracks = (topJson.items || [])
+      } else {
+        console.warn('Top tracks request failed, falling back to recommendations')
+      }
+
+      // Optionally: also fetch liked tracks or playlist tracks in future
+
+      if (tracks.length > 0) {
+        const ids = tracks.map(t => t.id).filter(Boolean)
+        const tempos = await fetchAudioFeatures(spotifyToken, ids)
+        const filtered = tracks.filter(t => {
+          const tempo = tempos[t.id]
+          return typeof tempo === 'number' && tempo >= targetMin && tempo <= targetMax
+        })
+        const songs = filtered.map(t => ({
+          title: t.name as string,
+          artist: (t.artists || []).map((a: any) => a.name).join(', '),
+          bpm: Math.round(tempos[t.id]),
+          duration: formatDuration(t.duration_ms),
+          inLibrary: true,
+        }))
+        return new Response(JSON.stringify({ songs }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      // no tracks found in top-tracks path → fall back below
     }
 
-    if (!spotifyToken) {
-      throw new Error('No Spotify token available')
-    }
+    console.log('No user token or no matches in library; using public recommendations')
+    const appToken = await getAppSpotifyToken()
+    if (!appToken) throw new Error('No Spotify token available')
 
     // Determine BPM target/range
     let cacheBpmRange = ''
@@ -161,23 +202,18 @@ serve(async (req) => {
     } else if (bpmMode === 'range' && minBpm && maxBpm) {
       params.set('min_tempo', minBpm)
       params.set('max_tempo', maxBpm)
-      // Set a soft target at the midpoint to guide recommendations
       const midpoint = Math.round((parseInt(minBpm) + parseInt(maxBpm)) / 2)
       params.set('target_tempo', String(midpoint))
       cacheBpmRange = `${minBpm}-${maxBpm}`
     } else {
-      // Default range
       params.set('min_tempo', '120')
       params.set('max_tempo', '140')
       params.set('target_tempo', '130')
       cacheBpmRange = '120-140'
     }
-
-    // Seed genres
     const seedGenres = mapToSeedGenres(genres)
     params.set('seed_genres', seedGenres.join(','))
 
-    // Create search query cache key and attempt cache hit
     const cacheKey = `${cacheBpmRange}_${seedGenres.join(',')}_${bpmMode}`
     const { data: cached } = await supabaseClient
       .from('music_search_cache')
@@ -185,30 +221,18 @@ serve(async (req) => {
       .eq('search_query', cacheKey)
       .gt('expires_at', new Date().toISOString())
       .single()
-
     if (cached) {
-      console.log('Returning cached results')
       return new Response(JSON.stringify(cached.results), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
-
-    // Call Spotify recommendations API
     const recUrl = `https://api.spotify.com/v1/recommendations?${params.toString()}`
-    const recRes = await fetch(recUrl, {
-      headers: { 'Authorization': `Bearer ${spotifyToken}` }
-    })
-    if (!recRes.ok) {
-      const text = await recRes.text()
-      console.error('Spotify recommendations error:', text)
-      throw new Error('Failed to fetch recommendations from Spotify')
-    }
+    const recRes = await fetch(recUrl, { headers: { 'Authorization': `Bearer ${appToken}` } })
+    if (!recRes.ok) throw new Error('Failed to fetch recommendations from Spotify')
     const recJson = await recRes.json()
-
     const tracks = (recJson.tracks || []) as Array<any>
-    const trackIds = tracks.map(t => t.id).filter(Boolean)
-    const tempos = await fetchAudioFeatures(spotifyToken, trackIds)
-
+    const ids = tracks.map(t => t.id).filter(Boolean)
+    const tempos = await fetchAudioFeatures(appToken, ids)
     const songs = tracks.map(t => ({
       title: t.name as string,
       artist: (t.artists || []).map((a: any) => a.name).join(', '),
@@ -216,24 +240,12 @@ serve(async (req) => {
       duration: formatDuration(t.duration_ms),
       inLibrary: false,
     }))
-
     const results = { songs }
-
-    // Cache for 1 hour
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
     await supabaseClient
       .from('music_search_cache')
-      .insert({
-        search_query: cacheKey,
-        bpm_range: cacheBpmRange,
-        genres: seedGenres,
-        results,
-        expires_at: expiresAt,
-      })
-
-    return new Response(JSON.stringify(results), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+      .insert({ search_query: cacheKey, bpm_range: cacheBpmRange, genres: seedGenres, results, expires_at: expiresAt })
+    return new Response(JSON.stringify(results), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   } catch (error) {
     console.error('Error in music-search function:', error);
