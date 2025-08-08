@@ -14,6 +14,83 @@ interface SearchParams {
   genres: string[];
 }
 
+async function getAppSpotifyToken(): Promise<string | null> {
+  const clientId = Deno.env.get('SPOTIFY_CLIENT_ID') ?? ''
+  const clientSecret = Deno.env.get('SPOTIFY_CLIENT_SECRET') ?? ''
+  if (!clientId || !clientSecret) {
+    console.error('Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET')
+    return null
+  }
+
+  const body = new URLSearchParams()
+  body.append('grant_type', 'client_credentials')
+
+  const basic = btoa(`${clientId}:${clientSecret}`)
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${basic}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body
+  })
+
+  if (!res.ok) {
+    console.error('Failed to get Spotify app token', await res.text())
+    return null
+  }
+  const json = await res.json()
+  return json.access_token as string
+}
+
+function mapToSeedGenres(genres: string[]): string[] {
+  if (!genres || genres.length === 0) return ['pop']
+  const mapping: Record<string, string> = {
+    'pop': 'pop',
+    'electronics': 'electronic',
+    'electronic': 'electronic',
+    'hip hop': 'hip-hop',
+    'hip-hop': 'hip-hop',
+    'rock': 'rock',
+    'alternative': 'alternative',
+    'indie': 'indie',
+    'dance': 'dance',
+    'house': 'house',
+  }
+  const seeds = genres
+    .map(g => mapping[g.trim().toLowerCase()] || g.trim().toLowerCase().replace(/\s+/g, '-'))
+    .filter(Boolean)
+  // Spotify allows up to 5 seed values
+  return (seeds.length > 0 ? seeds : ['pop']).slice(0, 5)
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+async function fetchAudioFeatures(token: string, trackIds: string[]): Promise<Record<string, number>> {
+  if (trackIds.length === 0) return {}
+  const ids = trackIds.join(',')
+  const res = await fetch(`https://api.spotify.com/v1/audio-features?ids=${ids}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  if (!res.ok) {
+    console.error('Failed to fetch audio features', await res.text())
+    return {}
+  }
+  const json = await res.json()
+  const map: Record<string, number> = {}
+  for (const af of json.audio_features || []) {
+    if (af && af.id && typeof af.tempo === 'number') {
+      map[af.id] = Math.round(af.tempo)
+    }
+  }
+  return map
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -36,7 +113,7 @@ serve(async (req) => {
       console.log('No auth header provided, proceeding without user-specific data');
     }
 
-    let spotifyToken = null;
+    let spotifyToken: string | null = null;
     
     // Try to get user's Spotify token if authenticated
     if (authHeader) {
@@ -61,117 +138,108 @@ serve(async (req) => {
       }
     }
 
-    // If no user token, we'll use Spotify's client credentials for public search
+    // If no user token, get an app token for public endpoints
     if (!spotifyToken) {
-      console.log('No user token available, using public search');
-    }
-
-    // Determine BPM range for search
-    let targetBpm = '';
-    if (bpmMode === 'single' && singleBpm) {
-      targetBpm = singleBpm;
-    } else if (bpmMode === 'range' && minBpm && maxBpm) {
-      targetBpm = `${minBpm}-${maxBpm}`;
+      spotifyToken = await getAppSpotifyToken()
+      console.log('Using app token for Spotify calls')
     } else {
-      targetBpm = '120-140'; // Default range
+      console.log('Using user Spotify token')
     }
 
-    // Create search query cache key
-    const cacheKey = `${targetBpm}_${genres.join(',')}_${bpmMode}`;
-    
-    // Check cache first
-    const { data: cachedResult } = await supabaseClient
+    if (!spotifyToken) {
+      throw new Error('No Spotify token available')
+    }
+
+    // Determine BPM target/range
+    let cacheBpmRange = ''
+    let params = new URLSearchParams()
+    params.set('limit', '30')
+
+    if (bpmMode === 'single' && singleBpm) {
+      params.set('target_tempo', singleBpm)
+      cacheBpmRange = singleBpm
+    } else if (bpmMode === 'range' && minBpm && maxBpm) {
+      params.set('min_tempo', minBpm)
+      params.set('max_tempo', maxBpm)
+      // Set a soft target at the midpoint to guide recommendations
+      const midpoint = Math.round((parseInt(minBpm) + parseInt(maxBpm)) / 2)
+      params.set('target_tempo', String(midpoint))
+      cacheBpmRange = `${minBpm}-${maxBpm}`
+    } else {
+      // Default range
+      params.set('min_tempo', '120')
+      params.set('max_tempo', '140')
+      params.set('target_tempo', '130')
+      cacheBpmRange = '120-140'
+    }
+
+    // Seed genres
+    const seedGenres = mapToSeedGenres(genres)
+    params.set('seed_genres', seedGenres.join(','))
+
+    // Create search query cache key and attempt cache hit
+    const cacheKey = `${cacheBpmRange}_${seedGenres.join(',')}_${bpmMode}`
+    const { data: cached } = await supabaseClient
       .from('music_search_cache')
       .select('results')
       .eq('search_query', cacheKey)
       .gt('expires_at', new Date().toISOString())
       .single()
 
-    if (cachedResult) {
-      console.log('Returning cached results');
-      return new Response(JSON.stringify(cachedResult.results), {
+    if (cached) {
+      console.log('Returning cached results')
+      return new Response(JSON.stringify(cached.results), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      })
     }
 
-    // For now, return enhanced mock data based on user's criteria
-    // In a real implementation, you would use Spotify Web API here
-    const mockResults = generateMockResults(targetBpm, genres, bpmMode, singleBpm, minBpm, maxBpm);
+    // Call Spotify recommendations API
+    const recUrl = `https://api.spotify.com/v1/recommendations?${params.toString()}`
+    const recRes = await fetch(recUrl, {
+      headers: { 'Authorization': `Bearer ${spotifyToken}` }
+    })
+    if (!recRes.ok) {
+      const text = await recRes.text()
+      console.error('Spotify recommendations error:', text)
+      throw new Error('Failed to fetch recommendations from Spotify')
+    }
+    const recJson = await recRes.json()
 
-    // Cache the results
+    const tracks = (recJson.tracks || []) as Array<any>
+    const trackIds = tracks.map(t => t.id).filter(Boolean)
+    const tempos = await fetchAudioFeatures(spotifyToken, trackIds)
+
+    const songs = tracks.map(t => ({
+      title: t.name as string,
+      artist: (t.artists || []).map((a: any) => a.name).join(', '),
+      bpm: tempos[t.id] ?? Math.round(Number(params.get('target_tempo') || '0')),
+      duration: formatDuration(t.duration_ms),
+      inLibrary: false,
+    }))
+
+    const results = { songs }
+
+    // Cache for 1 hour
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
     await supabaseClient
       .from('music_search_cache')
       .insert({
         search_query: cacheKey,
-        bpm_range: targetBpm,
-        genres: genres,
-        results: mockResults
+        bpm_range: cacheBpmRange,
+        genres: seedGenres,
+        results,
+        expires_at: expiresAt,
       })
 
-    console.log('Search completed, returning results');
-    return new Response(JSON.stringify(mockResults), {
+    return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    })
 
   } catch (error) {
     console.error('Error in music-search function:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 })
-
-function generateMockResults(targetBpm: string, genres: string[], bpmMode: string, singleBpm?: string, minBpm?: string, maxBpm?: string) {
-  // Enhanced mock data that responds to user's actual search criteria
-  const allSongs = [
-    { title: "Blinding Lights", artist: "The Weeknd", bpm: 171, duration: "3:20", genre: "pop", inLibrary: false },
-    { title: "Don't Start Now", artist: "Dua Lipa", bpm: 124, duration: "3:03", genre: "pop", inLibrary: true },
-    { title: "Watermelon Sugar", artist: "Harry Styles", bpm: 95, duration: "2:54", genre: "pop", inLibrary: false },
-    { title: "Levitating", artist: "Dua Lipa", bpm: 103, duration: "3:23", genre: "pop", inLibrary: true },
-    { title: "Good 4 U", artist: "Olivia Rodrigo", bpm: 166, duration: "2:58", genre: "rock", inLibrary: false },
-    { title: "Industry Baby", artist: "Lil Nas X ft. Jack Harlow", bpm: 150, duration: "3:32", genre: "hip hop", inLibrary: false },
-    { title: "Stay", artist: "The Kid LAROI & Justin Bieber", bpm: 169, duration: "2:21", genre: "pop", inLibrary: true },
-    { title: "Heat Waves", artist: "Glass Animals", bpm: 80, duration: "3:58", genre: "electronic", inLibrary: false },
-    { title: "Bad Habits", artist: "Ed Sheeran", bpm: 126, duration: "3:51", genre: "pop", inLibrary: true },
-    { title: "Montero", artist: "Lil Nas X", bpm: 178, duration: "2:17", genre: "hip hop", inLibrary: false },
-    { title: "Peaches", artist: "Justin Bieber ft. Daniel Caesar", bpm: 90, duration: "3:18", genre: "r&b", inLibrary: false },
-    { title: "Deja Vu", artist: "Olivia Rodrigo", bpm: 120, duration: "3:35", genre: "pop", inLibrary: true },
-    { title: "Drivers License", artist: "Olivia Rodrigo", bpm: 144, duration: "4:02", genre: "pop", inLibrary: false },
-    { title: "Positions", artist: "Ariana Grande", bpm: 130, duration: "2:52", genre: "r&b", inLibrary: true },
-    { title: "Mood", artist: "24kGoldn ft. iann dior", bpm: 91, duration: "2:20", genre: "hip hop", inLibrary: false },
-  ];
-
-  // Filter by BPM
-  let targetMin = 60;
-  let targetMax = 200;
-  
-  if (bpmMode === 'single' && singleBpm) {
-    const bpm = parseInt(singleBpm);
-    targetMin = bpm - 5; // Allow 5 BPM tolerance
-    targetMax = bpm + 5;
-  } else if (bpmMode === 'range' && minBpm && maxBpm) {
-    targetMin = parseInt(minBpm);
-    targetMax = parseInt(maxBpm);
-  }
-
-  let filteredSongs = allSongs.filter(song => 
-    song.bpm >= targetMin && song.bpm <= targetMax
-  );
-
-  // Filter by genres if any are selected
-  if (genres.length > 0 && !genres.includes('all')) {
-    filteredSongs = filteredSongs.filter(song => 
-      genres.some(genre => song.genre.toLowerCase().includes(genre.toLowerCase()))
-    );
-  }
-
-  // If no songs match criteria, return a few close matches
-  if (filteredSongs.length === 0) {
-    filteredSongs = allSongs.slice(0, 3);
-  }
-
-  // Limit to 10 results and add some randomization
-  const shuffled = filteredSongs.sort(() => 0.5 - Math.random());
-  return { songs: shuffled.slice(0, 10) };
-}
